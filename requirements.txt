@@ -1,0 +1,33 @@
+# Core training
+torch>=2.6,<2.14  # tested with 2.7 and 2.13
+torchvision
+numpy>=1.26,<2  # LIBERO's stack compiles against numpy 1.x; 2.x breaks its extensions
+einops
+hydra-core>=1.3
+omegaconf>=2.3
+pyyaml
+tqdm
+wandb>=0.19  # LIBERO pins wandb 0.13, which needs pkg_resources (gone in setuptools>=80) and protobuf 3
+accelerate>=0.34
+diffusers==0.34.0
+transformers==4.55.2
+tokenizers==0.21.4
+sentencepiece
+peft==0.19.1
+huggingface_hub
+
+# Data loading
+h5py
+pandas
+imageio[ffmpeg]
+opencv-python<4.12  # 4.12+ requires numpy>=2 on Python 3.10
+Pillow
+scipy
+matplotlib
+
+# Video/image metrics (validation logging)
+lpips
+pytorch-msssim
+
+# LIBERO training and evaluation (optional): LIBERO and its simulator are installed
+# separately, as in step 2 of the README's Setup section.

@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.vscode/
+.env
+
+# local data, weights and run outputs
+*.pt
+.cache
+checkpoints
+/data
+logs
+outputs
+preprocessed_data
+results
+rollout_videos
+videos
+wandb
+LIBERO
+
+# local agent context
+CLAUDE.md
+.claude/

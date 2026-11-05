@@ -1,0 +1,46 @@
+# @package training.dataset
+# One directory of HDF5 demos (layout: tapestry/loaders/hdf5_demo_dataset.py docstring), split by demo into
+# train / val with training.dataset.train_split / val_split. Used by cfg/finetune.yaml.
+datasets:
+  demos:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: ${training.dataset.demo_dir}
+    active_modalities: ["video", "action", "text"]
+    data_percentage: ${training.dataset.train_split}
+    batch_weight: 1.0
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: ${training.true_horizon}
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: false
+    normalize_actions: ${training.dataset.normalize_actions}
+    normalizer_stats_path: ${training.dataset.normalizer_stats_path}
+    relative_rotation_actions: ${training.dataset.relative_rotation_actions}
+    filter_no_motion: ${training.dataset.filter_no_motion}
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: ${training.dataset.corrupt_zero_blocks}
+    aug_cfg: ${train_aug_cfg}
+
+val_datasets:
+  demos_val:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: ${training.dataset.demo_dir}
+    active_modalities: ["video", "action", "text"]
+    data_percentage: ${training.dataset.val_split}
+    batch_weight: 1.0
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: ${training.true_horizon}
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: true
+    normalize_actions: ${training.dataset.normalize_actions}
+    normalizer_stats_path: ${training.dataset.normalizer_stats_path}
+    relative_rotation_actions: ${training.dataset.relative_rotation_actions}
+    filter_no_motion: ${training.dataset.filter_no_motion}
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: ${training.dataset.corrupt_zero_blocks}
+    aug_cfg: null

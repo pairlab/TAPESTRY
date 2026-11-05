@@ -1,0 +1,171 @@
+# TAPESTRY final recipe (real-world bimanual): joint video+action diffusion with
+# video-only midtraining on the Large Video Planner (LVP) mixture of cross-embodiment robot and human video.
+#
+# - CogVideoX-2b backbone, T5-XXL text tokens fed directly to the decoder
+# - Actions tokenized as single VAE patches through the shared patchifying conv
+# - First-frame VAE latents prepended to the action diffusion sequence
+# - Joint objective with coupled timesteps, mixed 50/50 with separate objectives
+# - LVP datasets are video+text only (no action loss on LVP data)
+#
+# Data mixture of the paper's final run:
+#   44.5% LVP video (droid/ego4d/epic_kitchens/ssv2/pandas/bridge/agibot)
+#   50.0% robot demos with actions (of which 12.5pt is play data)
+#    5.5% task-aligned human video
+#
+# Usage:
+#   accelerate launch train.py --config-name train_tapestry
+#
+# Data expectations:
+#   - LVP datasets: metadata CSV per dataset (columns: video_path, n_frames, fps, width,
+#     height, <caption columns>) plus the raw videos/frames on disk under training.dataset.root_dir.
+#     See tapestry/loaders/path_translator.py for the expected on-disk layout of each dataset.
+#   - Robot demos: one HDF5 file per demo (layout: tapestry/loaders/hdf5_demo_dataset.py docstring),
+#     one directory per task under training.dataset.demo_root_dir.
+#   - Normalizer stats: compute with scripts/compute_normalizer_stats.py.
+#
+# The data mixture lives in cfg/data/tapestry_paper.yaml (a Hydra config group, so a
+# derived config can swap the whole mixture: see cfg/finetune.yaml).
+
+defaults:
+  - data: tapestry_paper
+  - _self_
+
+experiment_name: "tapestry"
+
+quick: false        # quick=true limits datasets to 10 samples for smoke tests
+resume: false       # true: find and resume from latest checkpoint for this experiment_name
+checkpoint: null    # optional explicit checkpoint path to resume from
+init_from: null     # checkpoint to initialize weights from (no optimizer/epoch state; see cfg/finetune.yaml)
+use_static_graph: false
+
+cond_cameraviews: ["front_img_1", "left_wrist_img", "right_wrist_img"]
+
+# Augmentation for robot demo datasets (referenced by task entries below)
+train_aug_cfg:
+  random_crop: true
+  crop_scale: [0.85, 1.0]
+  crop_ratio: [0.98, 1.02]
+  color_jitter: true
+  brightness_strength: 0.25
+  contrast_strength: 0.25
+  saturation_strength: 0.25
+  hue_strength: 0.1
+  gaussian_blur: true
+  blur_kernel_size: 9
+  blur_sigma: [0.8, 1.3]
+
+model:
+  image_size: 128
+  action_dim: 20     # bimanual eepose_6drot: 2 arms x (3 pos + 6 rot6d + 1 gripper)
+
+sequence:
+  prefix_order:
+    - "text/embeddings"
+
+  # Route text tokens directly to the single dual-head decoder
+  loss_mappings:
+    action:
+      tokens: "text"
+      decoder: "cogvideox"
+      target: "action/future_frames"
+    video:
+      tokens: "text"
+      decoder: "cogvideox"
+      target: "video/future_frames"
+
+encoders:
+  text:
+    _class: "T5TextEncoder"
+    model_name_or_path: "google/t5-v1_1-xxl"
+    max_seq_len: 96
+    torch_dtype: "bfloat16"   # frozen encoder; halves T5 memory (fits consumer GPUs)
+
+decoders:
+  cogvideox:
+    _class: "CogVideoXDecoder"
+    pretrained_model_name: "THUDM/CogVideoX-2b"   # DiT architecture, weights and VAE
+    use_pretrained: true
+    freeze_pretrained_weights: false   # full finetune (set true + use_lora for LoRA-only)
+    use_lora: false
+    lora_config:
+      r: 16
+      lora_alpha: 32
+      target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+      init_lora_weights: true
+    gradient_checkpointing: false
+    action_dim: ${model.action_dim}
+    action_horizon: ${training.true_horizon}
+    max_text_seq_length: ${encoders.text.max_seq_len}
+    max_views: 3
+    use_vae: true
+    vae_scale_factor: 1.15258426       # matches CogVideoX pretrained VAE config
+    vae_scale_factor_spatial: 8
+    vae_scale_factor_temporal: 4
+    text_cond_dropout_prob: 0.1        # CFG text dropout
+    action_denoising_dropout: 0.1
+    joint_diffusion: true
+    joint_coupled_timesteps: true      # one timestep shared by video and action tokens
+    joint_diffusion_mix_prob: 0.5      # 50% joint / 50% separate for dual-target samples
+    joint_asymmetric_action_attn: true # video tokens cannot attend to action tokens when enabled
+
+logging:
+  log_every_n_steps: 50
+  save_every_n_epochs: 1
+
+training:
+  batch_size: 4              # per-GPU (final run: 4 x 48 H100s)
+  learning_rate: 1e-4
+  pretrained_learning_rate_multiplier: null
+  pretrained_decoder_key: "cogvideox"
+  num_epochs: 1000
+  seed: 42
+  save_interval: 500        # overwrite latest.pt every N steps (atomic, mid-epoch; for preemptible clusters)
+  true_horizon: 16           # action chunk length
+  weight_decay: 1e-4
+  lr_scheduler: null
+  num_workers: 8
+  persistent_workers: true
+  prefetch_factor: 4
+  mixed_precision: "bf16"
+  drop_last: true
+
+  validation:
+    per_dataset_max_batches: 10
+
+  wandb:
+    project: "tapestry"
+    log_videos_every: 1
+    video_inference_steps: 50
+    action_inference_steps: [10, 30, 100]  # full denoise at each step count for jitter metrics
+    use_wandb: false          # true logs losses and generated videos (run wandb login first)
+    guidance_scales: [1.0]
+
+  # Diffusion objectives (tapestry/losses.py): v-prediction MSE under the CogVideoX-2b noise schedule
+  # (zero terminal SNR, snr_shift_scale 3.0), shared by actions and video
+  objectives:
+    "action/future_frames":
+      weight: 1.0
+      predict_future_frames: false
+
+    "video/future_frames":
+      weight: 0.1
+      predict_future_frames: true   # condition on the clean first frame and predict the frames after it
+
+  dataset:
+    # Common dataset parameters (referenced by the entries in cfg/data/)
+    root_dir: "data"               # LVP video data + fm_datasets metadata CSVs
+    demo_root_dir: "data"          # robot demo HDF5 directories
+    action_space: "eepose_6drot"
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ["${model.image_size}", "${model.image_size}"]
+    pred_horizon: 8                # video frames per chunk: every (true_horizon / pred_horizon)-th timestep
+    normalize_actions: true
+    normalizer_stats_path: "data/normalizer_stats_eepose_6drot.json"  # scripts/compute_normalizer_stats.py
+    relative_rotation_actions: true
+    filter_no_motion: true
+    skip_first_frame: true
+    corrupt_zero_blocks: [[0, 1, 2], [10, 11, 12]]  # drop chunks where either arm's position is all-zero (logging glitches)
+
+# Real-world training: no sim eval during training
+evaluation:
+  enabled: false

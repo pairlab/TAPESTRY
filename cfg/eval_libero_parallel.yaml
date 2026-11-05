@@ -1,0 +1,27 @@
+# LIBERO evaluation of a checkpoint (eval_libero_parallel.py): one worker process per GPU.
+#
+#   python eval_libero_parallel.py checkpoint=/path/to/checkpoint.pt
+#   python eval_libero_parallel.py checkpoint=/path/to/checkpoint.pt 'suites=[libero_10,libero_spatial]' num_workers=4
+#
+# Image size, camera views, action horizon and action dim are read from the checkpoint.
+
+checkpoint: null             # REQUIRED
+t5_override: null            # null: the T5 encoder the checkpoint was trained with; "THUDM/CogVideoX-2b": its smaller fp16 copy
+experiment_name: null        # wandb run name (null: wandb picks one)
+use_wandb: false             # true logs results and rollout videos (run wandb login first)
+wandb_project: "tapestry"
+
+suites: [libero_10]          # any of libero_10, libero_90, libero_spatial, libero_goal, libero_object
+task_ids: null              # null = all tasks; e.g. [0] selects task 0 within each suite
+seed: 0                     # reset policy RNG per task; environment seed = seed + canonical state ID
+n_envs: 10                   # parallel envs per rollout batch
+n_rollouts_per_task: null    # distinct canonical states 0..N-1 (null = n_envs); errors if N exceeds available states
+max_steps: 500
+
+temporal_agg: true           # ACT-style exponential blending of overlapping action chunks
+execution_horizon: 8         # actions executed per model call (<= training.true_horizon)
+num_inference_steps: 1       # DDIM steps; 1 = single-step denoising (the paper's deployment setting)
+save_video: ${use_wandb}     # log each task's first rollout to wandb (requires use_wandb)
+
+num_workers: null            # null = one worker per visible GPU
+results_file: null           # optional JSON output path (without videos)

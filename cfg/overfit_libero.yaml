@@ -1,0 +1,32 @@
+# Single-task correctness diagnostic, NOT the paper's held-out task-generalization benchmark.
+# Point root_dir/libero_demos/<suite>/ at a directory containing exactly one task's HDF5.
+defaults:
+  - train_libero
+  - _self_
+
+experiment_name: libero_overfit
+
+training:
+  batch_size: 8
+  num_epochs: 20
+  save_interval: 500
+  dataset:
+    datasets:
+      video_only:
+        batch_weight: 0.0  # Explicitly exclude video-only data from this single-task diagnostic.
+      action_video:
+        dataset_names: [libero_object_t0]
+        batch_weight: 1.0
+    val_datasets:
+      video_only_val:
+        batch_weight: 0.0
+      action_video_val:
+        dataset_names: ${training.dataset.datasets.action_video.dataset_names}
+        batch_weight: 1.0
+
+evaluation:
+  # The targeted evaluator runs outside training so only the trained task is scored.
+  enabled: false
+
+logging:
+  save_every_n_epochs: 5

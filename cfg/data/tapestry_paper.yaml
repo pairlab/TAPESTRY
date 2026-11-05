@@ -1,0 +1,277 @@
+# @package training.dataset
+# Data mixture of the paper's final real-world run: 44.5% Large Video Planner (LVP) video, 50% robot demos and
+# 5.5% human video.
+# Selected by `defaults: [data: tapestry_paper]` in cfg/train_tapestry.yaml; swap the whole mixture with
+# `override data: <other file in cfg/data/>` (see cfg/finetune.yaml).
+
+datasets:
+  # ------------------------------------------------------------------
+  # LVP video-only midtraining data (44.5% of each batch, no action loss).
+  # Weights below are the exact final-run proportions.
+  # ------------------------------------------------------------------
+  droid_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "droid"
+    metadata_path: "fm_datasets/droid/cleaned_metadata.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.027245
+    cond_cameraviews: ["camera_0", "camera_1", "camera_2"]
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: 15       # robot data sped up toward human speed, as in Large Video Planner
+    caption_key: "gemini_caption"
+    fallback_caption_key: "original_caption"
+    trim_mode: "random_cut"
+    pad_mode: "slowdown"
+    filter_n_frames: [0, 300]
+    translate_paths: true
+    mp4_decoder: "decord"
+    is_validation: false
+
+  ego4d_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "ego4d"
+    metadata_path: "fm_datasets/ego4d/cleaned_metadata.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.020434
+    cond_cameraviews: null
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: null     # human video: use fps from metadata
+    caption_key: "gemini_caption"
+    fallback_caption_key: "original_caption"
+    trim_mode: "random_cut"
+    pad_mode: "slowdown"
+    filter_n_frames: [60, 150]
+    translate_paths: true
+    mp4_decoder: "decord"
+    is_validation: false
+
+  epic_kitchens_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "epic_kitchens"
+    metadata_path: "fm_datasets/epic_kitchens/cleaned_metadata.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.013622
+    cond_cameraviews: null
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: null
+    caption_key: "gemini_caption"
+    fallback_caption_key: "original_caption"
+    trim_mode: "random_cut"
+    pad_mode: "slowdown"
+    filter_n_frames: [60, 500]
+    translate_paths: true
+    mp4_decoder: "decord"
+    is_validation: false
+
+  ssv2_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "ssv2"
+    metadata_path: "fm_datasets/something_something_v2/cleaned_metadata.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.020434
+    cond_cameraviews: null
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: null
+    caption_key: "gemini_caption"
+    fallback_caption_key: "caption"
+    trim_mode: "speedup"
+    pad_mode: "pad_last"
+    filter_n_frames: [30, 100]
+    translate_paths: true
+    mp4_decoder: "decord"
+    is_validation: false
+
+  pandas_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "pandas"
+    metadata_path: "fm_datasets/Panda70M/training_metadata.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.127143
+    cond_cameraviews: null
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: null
+    caption_key: "gemini_caption"
+    fallback_caption_key: "caption"
+    trim_mode: "random_cut"
+    pad_mode: "slowdown"
+    filter_n_frames: [30, 300]
+    translate_paths: true
+    mp4_decoder: "decord"
+    is_validation: false
+
+  bridge_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "bridge"
+    metadata_path: "fm_datasets/bridge/multiview_metadata.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.05449
+    cond_cameraviews: ["images0", "images1", "images2"]
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: 10
+    caption_key: "gemini_caption"
+    fallback_caption_key: "original_caption"
+    trim_mode: "random_cut"
+    pad_mode: "slowdown"
+    filter_n_frames: [15, 80]
+    translate_paths: true
+    mp4_decoder: "decord"
+    is_validation: false
+
+  agibot_video:
+    _class: "VideoOnlyDataset"
+    root_dir: ${training.dataset.root_dir}
+    dataset_name: "agibot"
+    metadata_path: "fm_datasets/agibot/cleaned_metadata_filtered_3view.csv"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.181633
+    cond_cameraviews: ["front_img_1", "left_wrist_img", "right_wrist_img"]
+    img_shape: ${training.dataset.img_shape}
+    pred_horizon: ${training.dataset.pred_horizon}
+    target_fps: 10
+    effective_fps: 60
+    caption_key: "gemini_caption"
+    fallback_caption_key: "original_caption"
+    trim_mode: "random_cut"
+    pad_mode: "slowdown"
+    filter_n_frames: [100, 1000]
+    translate_paths: true
+    mp4_decoder: "imageio"
+    is_validation: false
+
+  # ------------------------------------------------------------------
+  # Robot demos with actions (50% of each batch in the final run, of
+  # which 25% was play data). The final run enumerated 24 task datasets;
+  # the entries below are templates: replace demo_dir with your own
+  # HDF5 demo directories (layout: tapestry/loaders/hdf5_demo_dataset.py) and add one entry per task.
+  # ------------------------------------------------------------------
+  task_demos:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: "task_demos"          # directory of *.hdf5 demos for one task
+    active_modalities: ["video", "action", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.375
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: ${training.true_horizon}
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: false
+    normalize_actions: ${training.dataset.normalize_actions}
+    normalizer_stats_path: ${training.dataset.normalizer_stats_path}
+    relative_rotation_actions: ${training.dataset.relative_rotation_actions}
+    filter_no_motion: ${training.dataset.filter_no_motion}
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: ${training.dataset.corrupt_zero_blocks}
+    aug_cfg: ${train_aug_cfg}
+
+  play_demos:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: "play"
+    active_modalities: ["video", "action", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.125             # play fraction of the action data
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: ${training.true_horizon}
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: false
+    normalize_actions: ${training.dataset.normalize_actions}
+    normalizer_stats_path: ${training.dataset.normalizer_stats_path}
+    relative_rotation_actions: ${training.dataset.relative_rotation_actions}
+    filter_no_motion: ${training.dataset.filter_no_motion}
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: ${training.dataset.corrupt_zero_blocks}
+    aug_cfg: ${train_aug_cfg}
+
+  # Task-aligned human video (video+text only, single front view, 5.5%)
+  human_video:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: "task_demos_human"
+    active_modalities: ["video", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.055
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ["front_img_1"]
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: 8
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: false
+    normalize_actions: false
+    normalizer_stats_path: null
+    relative_rotation_actions: false
+    filter_no_motion: false
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: null
+    aug_cfg: ${train_aug_cfg}
+
+val_datasets:
+  task_demos_val:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: "task_demos_val"
+    active_modalities: ["video", "action", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.5
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: ${training.true_horizon}
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: true
+    normalize_actions: ${training.dataset.normalize_actions}
+    normalizer_stats_path: ${training.dataset.normalizer_stats_path}
+    relative_rotation_actions: ${training.dataset.relative_rotation_actions}
+    filter_no_motion: ${training.dataset.filter_no_motion}
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: ${training.dataset.corrupt_zero_blocks}
+    aug_cfg: null
+
+  play_val:
+    _class: "HDF5DemoDataset"
+    root_dir: ${training.dataset.demo_root_dir}
+    demo_dir: "play_val"
+    active_modalities: ["video", "action", "text"]
+    data_percentage: 1.0
+    batch_weight: 0.5
+    action_space: ${training.dataset.action_space}
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ${training.dataset.img_shape}
+    true_horizon: ${training.true_horizon}
+    pred_horizon: ${training.dataset.pred_horizon}
+    is_validation: true
+    normalize_actions: ${training.dataset.normalize_actions}
+    normalizer_stats_path: ${training.dataset.normalizer_stats_path}
+    relative_rotation_actions: ${training.dataset.relative_rotation_actions}
+    filter_no_motion: ${training.dataset.filter_no_motion}
+    skip_first_frame: ${training.dataset.skip_first_frame}
+    corrupt_zero_blocks: ${training.dataset.corrupt_zero_blocks}
+    aug_cfg: null

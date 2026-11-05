@@ -1,0 +1,47 @@
+# Fine-tune a pretrained TAPESTRY checkpoint on your own robot demos (LoRA on the frozen backbone).
+#
+# Usage:
+#   accelerate launch train.py --config-name finetune init_from=tapestry.pt \
+#       training.dataset.demo_root_dir=data training.dataset.demo_dir=my_robot \
+#       training.dataset.normalizer_stats_path=data/my_robot/normalizer_stats.json \
+#       'cond_cameraviews=[front_img_1,left_wrist_img,right_wrist_img]'
+#
+# Everything not listed here (architecture, objectives, augmentation, ...) is inherited from
+# cfg/train_tapestry.yaml; the data mixture is replaced by cfg/data/hdf5_demos.yaml.
+# Any key can be overridden on the command line.
+
+defaults:
+  - train_tapestry
+  - override data: hdf5_demos
+  - _self_
+
+experiment_name: "tapestry_finetune"
+init_from: null                       # REQUIRED: checkpoint to start from (weights only; the action projection is re-initialized when its action_dim differs)
+
+cond_cameraviews: ["front_img_1", "left_wrist_img", "right_wrist_img"]  # dataset names under observations/images/
+
+model:
+  action_dim: 20                      # = ACTION_SPACE_CONFIGS[training.dataset.action_space]["total_dim"]
+
+decoders:
+  cogvideox:
+    freeze_pretrained_weights: true
+    use_lora: true                    # full finetune requires use_lora=false AND freeze_pretrained_weights=false
+    gradient_checkpointing: true
+
+logging:
+  save_every_n_epochs: 10             # each checkpoint holds the full model (~7.7 GB); latest.pt is refreshed every epoch
+
+training:
+  batch_size: 4
+  learning_rate: 1e-4
+  num_epochs: 50
+  dataset:
+    demo_root_dir: "data"
+    demo_dir: "my_robot"              # directory of *.hdf5 demos under demo_root_dir
+    action_space: "eepose_6drot"      # key in tapestry/utils/action_normalizer.py:ACTION_SPACE_CONFIGS
+    normalizer_stats_path: "data/my_robot/normalizer_stats.json"  # scripts/compute_normalizer_stats.py
+    relative_rotation_actions: true   # eepose_6drot only; false for other action spaces
+    corrupt_zero_blocks: null         # e.g. [[0, 1, 2]] to drop chunks whose position dims are all zero
+    train_split: 0.9
+    val_split: 0.1

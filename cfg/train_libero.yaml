@@ -1,0 +1,194 @@
+# TAPESTRY LIBERO task-generalization recipe: full CogVideoX-2b fine-tuning.
+#
+# - Fully trainable CogVideoX-2b (no LoRA), frozen T5-XXL tokens fed directly to the decoder
+# - Actions tokenized as single VAE patches through the shared patchifying conv
+# - First-frame VAE latents prepended to the action diffusion sequence
+# - Joint objective with coupled timesteps, mixed 50/50 with separate objectives
+# - 50% video-only batches (all suites) / 50% action batches (libero_90 only);
+#   evaluated zero-shot on libero_10/object/spatial/goal
+#
+# Usage:
+#   accelerate launch train.py --config-name train_libero
+#
+# Data expectations: LIBERO demo HDF5s under training.dataset.root_dir/libero_demos/<suite>/
+# (task text is derived from the demo filenames).
+
+experiment_name: "tapestry_libero_taskgen"
+
+quick: false
+resume: false
+checkpoint: null
+init_from: null     # checkpoint to initialize weights from (no optimizer/epoch state)
+use_static_graph: false
+
+cond_cameraviews: ["agentview", "eye_in_hand"]
+
+model:
+  action_dim: 7                    # LIBERO: 6-DoF end-effector delta + gripper
+  image_size: 128
+
+sequence:
+  prefix_order:
+    - "text/embeddings"
+
+  loss_mappings:
+    action:
+      tokens: "text"
+      decoder: "cogvideox"
+      target: "action/future_frames"
+    video:
+      tokens: "text"
+      decoder: "cogvideox"
+      target: "video/future_frames"
+
+encoders:
+  text:
+    _class: "T5TextEncoder"
+    model_name_or_path: "google/t5-v1_1-xxl"
+    max_seq_len: 226
+    torch_dtype: "bfloat16"   # frozen encoder; halves T5 memory (fits consumer GPUs)
+
+decoders:
+  cogvideox:
+    _class: "CogVideoXDecoder"
+    pretrained_model_name: "THUDM/CogVideoX-2b"   # DiT architecture, weights and VAE
+    use_pretrained: true
+    freeze_pretrained_weights: false   # full finetune (set true + use_lora for LoRA-only)
+    use_lora: false
+    lora_config:
+      r: 16
+      lora_alpha: 32
+      target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+      init_lora_weights: true
+    gradient_checkpointing: true
+    action_dim: ${model.action_dim}
+    action_horizon: ${training.true_horizon}
+    max_text_seq_length: ${encoders.text.max_seq_len}
+    max_views: 3
+    use_vae: true
+    vae_scale_factor: 1.15258426       # matches CogVideoX pretrained VAE config
+    vae_scale_factor_spatial: 8
+    vae_scale_factor_temporal: 4
+    text_cond_dropout_prob: 0.0        # CFG text dropout
+    action_denoising_dropout: 0.0
+    joint_diffusion: true
+    joint_coupled_timesteps: true      # one timestep shared by video and action tokens
+    joint_diffusion_mix_prob: 0.5      # 50% joint / 50% separate for dual-target samples
+    joint_asymmetric_action_attn: false # video tokens cannot attend to action tokens when enabled
+
+logging:
+  log_every_n_steps: 50
+  save_every_n_epochs: 1
+
+training:
+  batch_size: 32
+  learning_rate: 1e-4
+  pretrained_learning_rate_multiplier: null
+  pretrained_decoder_key: "cogvideox"
+  num_epochs: 7              # the paper's schedule
+  seed: 42
+  save_interval: 500        # overwrite latest.pt every N steps (atomic, mid-epoch; for preemptible clusters)
+  true_horizon: 16
+  weight_decay: 1e-5
+  lr_scheduler: null
+  num_workers: 4
+  persistent_workers: false
+  prefetch_factor: 2
+  mixed_precision: "bf16"
+  drop_last: true
+
+  validation:
+    per_dataset_max_batches: 10
+
+  wandb:
+    project: "tapestry"
+    log_videos_every: 1
+    video_inference_steps: 50
+    action_inference_steps: [10, 30, 100]
+    use_wandb: false          # true logs losses, generated videos and LIBERO rollouts (run wandb login first)
+    guidance_scales: [1.0]
+
+  # Diffusion objectives (tapestry/losses.py): v-prediction MSE under the CogVideoX-2b noise schedule
+  objectives:
+    "action/future_frames":
+      weight: 0.03
+      predict_future_frames: false
+
+    "video/future_frames":
+      weight: 1.0
+      predict_future_frames: true   # condition on the clean first frame and predict the frames after it
+
+  dataset:
+    datasets:
+      # Video-only batches over all suites (video prediction on held-out tasks)
+      video_only:
+        _class: "LiberoDataset"
+        root_dir: ${training.dataset.root_dir}
+        dataset_names: ["libero_90", "libero_10", "libero_object", "libero_spatial", "libero_goal"]
+        active_modalities: ["video", "text"]
+        data_percentage: 0.9
+        batch_weight: 0.5
+        cond_cameraviews: ${cond_cameraviews}
+        img_shape: ${training.dataset.img_shape}
+        true_horizon: ${training.true_horizon}
+        pred_horizon: ${training.dataset.pred_horizon}
+        is_validation: false
+
+      # Action batches from libero_90 only (held-out suites never see action data)
+      action_video:
+        _class: "LiberoDataset"
+        root_dir: ${training.dataset.root_dir}
+        dataset_names: ["libero_90"]
+        active_modalities: ["video", "action", "text"]
+        data_percentage: 0.9
+        batch_weight: 0.5
+        cond_cameraviews: ${cond_cameraviews}
+        img_shape: ${training.dataset.img_shape}
+        true_horizon: ${training.true_horizon}
+        pred_horizon: ${training.dataset.pred_horizon}
+        is_validation: false
+
+    val_datasets:
+      video_only_val:
+        _class: "LiberoDataset"
+        root_dir: ${training.dataset.root_dir}
+        dataset_names: ["libero_10", "libero_object", "libero_spatial", "libero_goal"]
+        active_modalities: ["video", "text"]
+        data_percentage: 0.1
+        batch_weight: 0.5
+        cond_cameraviews: ${cond_cameraviews}
+        img_shape: ${training.dataset.img_shape}
+        true_horizon: ${training.true_horizon}
+        pred_horizon: ${training.dataset.pred_horizon}
+        is_validation: true
+
+      action_video_val:
+        _class: "LiberoDataset"
+        root_dir: ${training.dataset.root_dir}
+        dataset_names: ["libero_10", "libero_object", "libero_spatial", "libero_goal"]
+        active_modalities: ["video", "action", "text"]
+        data_percentage: 0.1
+        batch_weight: 0.5
+        cond_cameraviews: ${cond_cameraviews}
+        img_shape: ${training.dataset.img_shape}
+        true_horizon: ${training.true_horizon}
+        pred_horizon: ${training.dataset.pred_horizon}
+        is_validation: true
+
+    root_dir: "preprocessed_data"
+    cond_cameraviews: ${cond_cameraviews}
+    img_shape: ["${model.image_size}", "${model.image_size}"]
+    pred_horizon: 16          # video frames per chunk: every (true_horizon / pred_horizon)-th timestep
+
+evaluation:
+  enabled: true
+  eval_every: 3
+
+  suites: ["libero_10", "libero_object", "libero_spatial", "libero_goal"]
+  n_envs: 10
+  max_steps: 500
+
+  temporal_agg: true
+  save_rollout_video: ${training.wandb.use_wandb}  # log each task's first rollout to wandb (requires use_wandb)
+  execution_horizon: 8      # actions executed per inference during in-training eval
+  num_inference_steps: 1    # single-step DDIM (paper deployment setting); 50-step eval takes ~5h/epoch
