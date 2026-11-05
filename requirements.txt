@@ -10,7 +10,7 @@ tqdm
 wandb>=0.19  # LIBERO pins wandb 0.13, which needs pkg_resources (gone in setuptools>=80) and protobuf 3
 accelerate>=0.34
 diffusers==0.34.0
-transformers==4.55.2
+transformers==5.10.1
 tokenizers==0.21.4
 sentencepiece
 peft==0.19.1
