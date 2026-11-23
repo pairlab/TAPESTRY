@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 
 from tapestry.models.policy import TapestryPolicy
+from tapestry.utils.device import default_device
 from tapestry.utils.libero_utils import build_libero_env
 
 
@@ -22,9 +23,10 @@ def main():
     ap.add_argument("--num-inference-steps", type=int, default=1)
     ap.add_argument("--t5-override", default=None, help="T5 encoder to load instead of the checkpoint's, e.g. THUDM/CogVideoX-2b for its smaller fp16 copy")
     ap.add_argument("--text-cache-dir", default=None, help="keep T5 off the GPU and cache instruction embeddings in this directory")
+    ap.add_argument("--device", default=None, help="torch device for the policy (default: cuda, else xpu, else cpu)")
     args = ap.parse_args()
 
-    policy = TapestryPolicy(args.checkpoint, "cuda", args.num_inference_steps, args.t5_override, args.text_cache_dir)
+    policy = TapestryPolicy(args.checkpoint, args.device or default_device(), args.num_inference_steps, args.t5_override, args.text_cache_dir)
     env, task = build_libero_env(args.suite, args.task, img_size=policy.image_size, n_envs=1, init_state_ids=None)
     print(f"task: {task}; cameras: {policy.cameras}; chunk: {policy.action_horizon} x {policy.action_dim}")
     obs = env.reset()

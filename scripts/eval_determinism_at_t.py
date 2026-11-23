@@ -44,6 +44,7 @@ from einops import rearrange, repeat
 from tapestry.eval_utils import action_noise_scheduler
 from tapestry.models.model_loading import load_unified_model, encode_task_text_with_caching
 from tapestry.models.unified_model_wrapper import UnifiedModelWrapper
+from tapestry.utils.device import default_device
 
 
 def load_text_emb_from_file(path: str) -> torch.Tensor:
@@ -87,7 +88,7 @@ def expand_batch(t, n):
 
 @torch.no_grad()
 def run(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = default_device()
     torch.manual_seed(args.seed)
 
     # Encode (or load) the task text BEFORE building the main model, so T5-xxl

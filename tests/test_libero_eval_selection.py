@@ -165,6 +165,16 @@ def test_visible_gpus(monkeypatch):
     assert parallel_eval.visible_gpus() == ["0", "1", "2"]
 
 
+def test_visible_gpus_xpu(monkeypatch):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.delenv("ZE_AFFINITY_MASK", raising=False)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 0)
+    monkeypatch.setattr(torch, "xpu", SimpleNamespace(is_available=lambda: True, device_count=lambda: 2), raising=False)
+    assert parallel_eval.visible_gpus() == ["0", "1"]
+    monkeypatch.setenv("ZE_AFFINITY_MASK", "1")
+    assert parallel_eval.visible_gpus() == ["1"]
+
+
 def run_eval(checkpoint, num_workers, results_file):
     return parallel_eval.run_parallel_libero_eval(
         checkpoint, None, ["libero_object"], 2, 5, 10, 10, ["agentview"], False,

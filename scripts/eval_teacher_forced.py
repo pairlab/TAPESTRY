@@ -53,6 +53,7 @@ from tapestry.utils.action_preprocess import to_relative_rot6d_eepose20
 from tapestry.eval_utils import action_noise_scheduler
 from tapestry.models.model_loading import load_checkpoint_cpu, load_unified_model, encode_task_text_with_caching
 from tapestry.models.unified_model_wrapper import UnifiedModelWrapper
+from tapestry.utils.device import default_device
 
 
 def load_text_emb_from_file(path: str) -> torch.Tensor:
@@ -109,7 +110,7 @@ def load_chunk(hdf5_path, t_index, normalizer, action_horizon, action_dim, img_s
 
 @torch.no_grad()
 def run(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = default_device()
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
     ck = load_checkpoint_cpu(args.checkpoint)

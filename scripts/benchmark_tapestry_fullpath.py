@@ -31,6 +31,7 @@ from omegaconf import OmegaConf
 from tapestry.eval_utils import action_noise_scheduler
 from tapestry.models.base import Tapestry
 from tapestry.models.unified_model_wrapper import UnifiedModelWrapper
+from tapestry.utils.device import default_device
 
 
 def log(msg: str) -> None:
@@ -59,9 +60,11 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=None)
     args = p.parse_args()
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA required")
-    dev = torch.device("cuda:0")
+    dev = default_device()
+    if dev.type == "cpu":
+        raise RuntimeError("CUDA or XPU required")
+    dev = torch.device(dev.type, 0)
+    acc = getattr(torch, dev.type)  # torch.cuda or torch.xpu
     torch.manual_seed(7)
 
     cfg = load_cfg(args.cfg)
@@ -99,9 +102,9 @@ def main() -> None:
     video = torch.rand((n_envs, v, 1, 3, img_size, img_size), device=dev, dtype=torch.float32)
     text = torch.randn((n_envs, max_seq_len, text_dim), device=dev, dtype=torch.float32)
 
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize(dev)
-    torch.cuda.reset_peak_memory_stats(dev)
+    acc.empty_cache()
+    acc.synchronize(dev)
+    acc.reset_peak_memory_stats(dev)
 
     lats: list[float] = []
     cond_lats: list[float] = []
@@ -110,16 +113,16 @@ def main() -> None:
     log(f"Timing: get_conditioning_dict + forward (n_inf={args.n_inf}, mode={args.inference_mode})")
     for i in range(n_total):
         kind = "warmup" if i < args.warmup else "measure"
-        torch.cuda.synchronize(dev)
+        acc.synchronize(dev)
         t0 = time.perf_counter()
 
-        torch.cuda.synchronize(dev)
+        acc.synchronize(dev)
         tA = time.perf_counter()
         cond = wrapper.get_conditioning_dict(video, text)
-        torch.cuda.synchronize(dev)
+        acc.synchronize(dev)
         tB = time.perf_counter()
         wrapper.forward(cond, sch, num_inference_steps=args.n_inf)
-        torch.cuda.synchronize(dev)
+        acc.synchronize(dev)
         tC = time.perf_counter()
 
         total_ms = (tC - t0) * 1000.0
@@ -131,7 +134,7 @@ def main() -> None:
             cond_lats.append(cond_ms)
             fwd_lats.append(fwd_ms)
 
-    pk_alloc_mb = float(torch.cuda.max_memory_allocated(dev)) / 1024.0 / 1024.0
+    pk_alloc_mb = float(acc.max_memory_allocated(dev)) / 1024.0 / 1024.0
 
     avg = statistics.mean(lats)
     med = statistics.median(lats)
@@ -147,7 +150,7 @@ def main() -> None:
         "max_seq_len": max_seq_len,
         "num_inference_steps": args.n_inf,
         "inference_mode": args.inference_mode,
-        "device": torch.cuda.get_device_name(dev),
+        "device": acc.get_device_name(dev),
         "torch_version": torch.__version__,
         "latency_ms_avg": avg,
         "latency_ms_median": med,

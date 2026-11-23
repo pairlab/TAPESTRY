@@ -29,6 +29,7 @@ from omegaconf import OmegaConf
 
 from tapestry.eval_utils import action_noise_scheduler
 from tapestry.models.decoders.video import CogVideoXDecoder
+from tapestry.utils.device import default_device
 
 
 @dataclass
@@ -120,16 +121,17 @@ def run(c: Case, cfg: dict[str, Any], n_envs: int, n_inf: int, warmup: int, meas
     dec = mk_dec(cfg, c, dev, dtype)
     sch = action_noise_scheduler(cfg)
     cond, batch = mk_inputs(c, dec, n_envs, dev)
+    acc = getattr(torch, dev.type)  # torch.cuda or torch.xpu
 
-    torch.cuda.empty_cache()
-    torch.cuda.synchronize(device=dev)
-    torch.cuda.reset_peak_memory_stats(device=dev)
+    acc.empty_cache()
+    acc.synchronize(device=dev)
+    acc.reset_peak_memory_stats(device=dev)
 
     lats: list[float] = []
     n_total = warmup + measure
     for i in range(n_total):
         kind = "warmup" if i < warmup else "measure"
-        torch.cuda.synchronize(device=dev)
+        acc.synchronize(device=dev)
         t0 = time.perf_counter()
         if c.inference_mode == "joint":
             out = dec.decode_actions_with_joint_diffusion(
@@ -148,14 +150,14 @@ def run(c: Case, cfg: dict[str, Any], n_envs: int, n_inf: int, warmup: int, meas
             )
         else:
             raise ValueError(f"Unknown inference_mode: {c.inference_mode}")
-        torch.cuda.synchronize(device=dev)
+        acc.synchronize(device=dev)
         dt = (time.perf_counter() - t0) * 1000.0
         log(f"    iter {i+1}/{n_total} ({kind}) {dt:.2f} ms")
         if i >= warmup:
             lats.append(dt)
 
-    pk_alloc_mb = float(torch.cuda.max_memory_allocated(device=dev)) / (1024.0 * 1024.0)
-    pk_reserved_mb = float(torch.cuda.max_memory_reserved(device=dev)) / (1024.0 * 1024.0)
+    pk_alloc_mb = float(acc.max_memory_allocated(device=dev)) / (1024.0 * 1024.0)
+    pk_reserved_mb = float(acc.max_memory_reserved(device=dev)) / (1024.0 * 1024.0)
 
     avg = statistics.mean(lats)
     med = statistics.median(lats)
@@ -165,7 +167,7 @@ def run(c: Case, cfg: dict[str, Any], n_envs: int, n_inf: int, warmup: int, meas
         **asdict(c),
         "n_envs": n_envs,
         "num_inference_steps": n_inf,
-        "device": torch.cuda.get_device_name(dev),
+        "device": acc.get_device_name(dev),
         "torch_version": torch.__version__,
         "latency_ms_avg": avg,
         "latency_ms_median": med,
@@ -197,9 +199,10 @@ def main() -> None:
     p.add_argument("--real-vae", action="store_true", help="Load actual CogVideoX-2b VAE (else patched random latents)")
     args = p.parse_args()
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required for this benchmark")
-    dev = torch.device("cuda:0")
+    dev = default_device()
+    if dev.type == "cpu":
+        raise RuntimeError("CUDA or XPU is required for this benchmark")
+    dev = torch.device(dev.type, 0)
     torch.manual_seed(7)
 
     cfg = load_cfg(args.cfg)
@@ -224,7 +227,7 @@ def main() -> None:
         "float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32,
     }[args.dtype]
 
-    log(f"Device: {torch.cuda.get_device_name(dev)}  torch={torch.__version__}")
+    log(f"Device: {getattr(torch, dev.type).get_device_name(dev)}  torch={torch.__version__}")
     log(f"cfg={args.cfg}")
     log(f"case: {base}")
 

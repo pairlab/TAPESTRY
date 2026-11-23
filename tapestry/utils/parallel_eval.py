@@ -12,6 +12,7 @@ import torch
 from tqdm import tqdm
 
 from tapestry.eval_utils import action_noise_scheduler, seed_eval, select_tasks
+from tapestry.utils.device import default_device
 
 
 class LiberoEvalWorker:
@@ -19,7 +20,7 @@ class LiberoEvalWorker:
                  temporal_agg, action_horizon, action_dim, save_video, execution_horizon, num_inference_steps, seed):
         from tapestry.models.unified_model_wrapper import UnifiedModelWrapper
 
-        self.policy = UnifiedModelWrapper.from_checkpoint(checkpoint_path, "cuda", t5_override)
+        self.policy = UnifiedModelWrapper.from_checkpoint(checkpoint_path, default_device(), t5_override)
         self.noise_scheduler = action_noise_scheduler(self.policy.model.cfg)
         self.img_size = img_size
         self.n_envs = n_envs
@@ -74,10 +75,11 @@ _worker = None  # this process's LiberoEvalWorker, built by _init_worker
 
 
 def _init_worker(gpus, worker_args):
-    """Pin this worker process to its own GPU before CUDA and MuJoCo start, then load the checkpoint."""
+    """Pin this worker process to its own GPU before CUDA (or XPU) and MuJoCo start, then load the checkpoint."""
     global _worker
     gpu = gpus.get()
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+    os.environ["ZE_AFFINITY_MASK"] = gpu  # the same for Intel GPUs (XPU)
     os.environ["MUJOCO_EGL_DEVICE_ID"] = gpu  # robosuite's EGL renderer must use the same device
     _worker = LiberoEvalWorker(*worker_args)
 
@@ -87,9 +89,14 @@ def _evaluate_task(suite, task_no):
 
 
 def visible_gpus():
-    """Physical GPU IDs from CUDA_VISIBLE_DEVICES, or every GPU when it is unset."""
+    """Physical GPU IDs from CUDA_VISIBLE_DEVICES, or every GPU when it is unset. Without CUDA, Intel GPUs (XPU)
+    are used, from ZE_AFFINITY_MASK or all of them."""
     if "CUDA_VISIBLE_DEVICES" in os.environ:
         return [gpu for gpu in os.environ["CUDA_VISIBLE_DEVICES"].split(",") if gpu]
+    if torch.cuda.device_count() == 0 and hasattr(torch, "xpu") and torch.xpu.is_available():
+        if "ZE_AFFINITY_MASK" in os.environ:
+            return [gpu for gpu in os.environ["ZE_AFFINITY_MASK"].split(",") if gpu]
+        return [str(i) for i in range(torch.xpu.device_count())]
     return [str(i) for i in range(torch.cuda.device_count())]
 
 
