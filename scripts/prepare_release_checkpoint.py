@@ -18,6 +18,7 @@ import os
 import torch
 
 from tapestry.models.model_loading import load_checkpoint_cpu
+from tapestry.utils.device import gpu_device
 
 HF_SOURCES = {"t5-v1_1-xxl": "google/t5-v1_1-xxl", "CogVideoX-2b": "THUDM/CogVideoX-2b"}
 
@@ -118,7 +119,7 @@ def main():
     ap.add_argument("--output", required=True)
     ap.add_argument("--normalizer-stats", default=None, help="stats JSON to embed when the path in the config is not available here")
     ap.add_argument("--verify", action="store_true", help="reload the output with TapestryPolicy and run one forward pass")
-    ap.add_argument("--device", default="cuda", help="device for --verify")
+    ap.add_argument("--device", default=None, help="device for --verify (default: cuda, else xpu)")
     ap.add_argument("--t5-override", default=None, help="for --verify: T5 encoder to load instead of the checkpoint's, e.g. THUDM/CogVideoX-2b for its smaller fp16 copy")
     args = ap.parse_args()
 
@@ -138,7 +139,7 @@ def main():
     print(f"wrote {args.output} ({os.path.getsize(args.output) / 1e9:.2f} GB); normalizer="
           f"{None if normalizer is None else normalizer['action_space']}, relative_rotation_actions={relative_rotation_actions}")
     if args.verify:
-        verify(args.output, args.device, args.t5_override)
+        verify(args.output, args.device or gpu_device(), args.t5_override)
 
 
 if __name__ == "__main__":

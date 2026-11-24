@@ -69,6 +69,18 @@ pip install torch==2.7.0 torchvision==0.22.0 --index-url https://download.pytorc
 
 The frozen base models download from HuggingFace on first use: the [CogVideoX-2b](https://huggingface.co/THUDM/CogVideoX-2b) transformer and VAE (about 4 GB) and the [T5-XXL](https://huggingface.co/google/t5-v1_1-xxl) text encoder (about 45 GB, or 9.5 GB with the [fp16 copy](#smaller-t5-download)).
 
+#### Run on Intel GPU (XPU)
+
+Inference also runs on Intel GPUs through PyTorch's XPU backend. Install the XPU build of PyTorch first, which `pip install -e .` then keeps:
+
+``` bash
+pip install "torch==2.13.*" torchvision --index-url https://download.pytorch.org/whl/xpu
+pip install -e .
+python -c "import torch; print(torch.__version__, torch.xpu.is_available())"   # 2.13.0+xpu True
+```
+
+Pass `device="xpu"` to `TapestryPolicy` in [Run a policy](#run-a-policy). `eval_libero_parallel.py` and the scripts in `scripts/` that run the model use CUDA when it is available, else XPU, and stop with an error when neither is usable; only `eval_teacher_forced.py` and `eval_determinism_at_t.py` fall back to the CPU. `--device` overrides this where a script has that option. The LIBERO evaluator starts one worker per Intel GPU, and `ZE_AFFINITY_MASK` limits them as `CUDA_VISIBLE_DEVICES` does on NVIDIA GPUs. Training is unchanged and has only been run on CUDA.
+
 ## Pretrained checkpoint
 
 | Checkpoint | Training data | Cameras and actions | Inference GPU memory |

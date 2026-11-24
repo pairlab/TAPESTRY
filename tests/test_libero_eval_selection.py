@@ -165,6 +165,30 @@ def test_visible_gpus(monkeypatch):
     assert parallel_eval.visible_gpus() == ["0", "1", "2"]
 
 
+def test_visible_gpus_xpu(monkeypatch):
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.delenv("ZE_AFFINITY_MASK", raising=False)
+    monkeypatch.setattr(torch.cuda, "device_count", lambda: 0)
+    monkeypatch.setattr(torch, "xpu", SimpleNamespace(is_available=lambda: True, device_count=lambda: 2), raising=False)
+    assert parallel_eval.visible_gpus() == ["0", "1"]
+    monkeypatch.setenv("ZE_AFFINITY_MASK", "1")
+    assert parallel_eval.visible_gpus() == ["1"]
+
+
+def test_worker_without_usable_gpu_stops_before_loading(monkeypatch):
+    # A worker pinned to a missing or unusable GPU must fail at start, not run the eval on the CPU.
+    from tapestry.models.unified_model_wrapper import UnifiedModelWrapper
+
+    def load(*args):
+        raise AssertionError("the checkpoint was loaded without a GPU")
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(torch, "xpu", SimpleNamespace(is_available=lambda: False), raising=False)
+    monkeypatch.setattr(UnifiedModelWrapper, "from_checkpoint", load)
+    with pytest.raises(RuntimeError, match="no usable CUDA or XPU device"):
+        parallel_eval.LiberoEvalWorker("unused.pt", None, 2, 5, 10, 10, ["agentview"], False, 4, 7, False, 2, 1, 17)
+
+
 def run_eval(checkpoint, num_workers, results_file):
     return parallel_eval.run_parallel_libero_eval(
         checkpoint, None, ["libero_object"], 2, 5, 10, 10, ["agentview"], False,
