@@ -12,7 +12,7 @@ import torch
 from tqdm import tqdm
 
 from tapestry.eval_utils import action_noise_scheduler, seed_eval, select_tasks
-from tapestry.utils.device import default_device
+from tapestry.utils.device import gpu_device
 
 
 class LiberoEvalWorker:
@@ -20,7 +20,7 @@ class LiberoEvalWorker:
                  temporal_agg, action_horizon, action_dim, save_video, execution_horizon, num_inference_steps, seed):
         from tapestry.models.unified_model_wrapper import UnifiedModelWrapper
 
-        self.policy = UnifiedModelWrapper.from_checkpoint(checkpoint_path, default_device(), t5_override)
+        self.policy = UnifiedModelWrapper.from_checkpoint(checkpoint_path, gpu_device(), t5_override)
         self.noise_scheduler = action_noise_scheduler(self.policy.model.cfg)
         self.img_size = img_size
         self.n_envs = n_envs

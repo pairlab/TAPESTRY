@@ -79,7 +79,7 @@ pip install -e .
 python -c "import torch; print(torch.__version__, torch.xpu.is_available())"   # 2.13.0+xpu True
 ```
 
-Pass `device="xpu"` to `TapestryPolicy` in [Run a policy](#run-a-policy). `eval_libero_parallel.py` and the scripts in `scripts/` that run the model use CUDA when it is available, else XPU, else the CPU, and `--device` overrides this where a script has that option. The LIBERO evaluator starts one worker per Intel GPU, and `ZE_AFFINITY_MASK` limits them as `CUDA_VISIBLE_DEVICES` does on NVIDIA GPUs. Training is unchanged and has only been run on CUDA.
+Pass `device="xpu"` to `TapestryPolicy` in [Run a policy](#run-a-policy). `eval_libero_parallel.py` and the scripts in `scripts/` that run the model use CUDA when it is available, else XPU, and stop with an error when neither is usable; only `eval_teacher_forced.py` and `eval_determinism_at_t.py` fall back to the CPU. `--device` overrides this where a script has that option. The LIBERO evaluator starts one worker per Intel GPU, and `ZE_AFFINITY_MASK` limits them as `CUDA_VISIBLE_DEVICES` does on NVIDIA GPUs. Training is unchanged and has only been run on CUDA.
 
 ## Pretrained checkpoint
 

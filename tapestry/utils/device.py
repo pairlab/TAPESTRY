@@ -1,4 +1,6 @@
-"""Default torch device: CUDA when available, else an Intel GPU (XPU), else the CPU."""
+"""Default torch devices: CUDA when available, else an Intel GPU (XPU), and the CPU only where the code allows it."""
+import os
+
 import torch
 
 
@@ -9,3 +11,13 @@ def default_device() -> torch.device:
     if hasattr(torch, "xpu") and torch.xpu.is_available():
         return torch.device("xpu")
     return torch.device("cpu")
+
+
+def gpu_device() -> torch.device:
+    """CUDA when available, else XPU (Intel GPU). For code that needs a GPU: raises instead of falling back to the CPU,
+    so a process pinned to a missing or unusable GPU stops at once."""
+    device = default_device()
+    if device.type == "cpu":
+        raise RuntimeError(f"no usable CUDA or XPU device (CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}, "
+                           f"ZE_AFFINITY_MASK={os.environ.get('ZE_AFFINITY_MASK')})")
+    return device
